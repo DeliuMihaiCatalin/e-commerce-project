@@ -1,0 +1,3 @@
+wwwroot\app.js
+wwwroot\index.html
+wwwroot\style.css
