@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gun Slop – Catalog</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>GUN SLOP</h1>
+    <form id="searchForm" role="search">
+      <input id="q" type="search" placeholder="Search name, brand, caliber…" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
+  </header>
+
+  <main>
+    <aside class="filters">
+      <h2>Filters</h2>
+      <label>Category
+        <select id="category"><option value="">All</option></select>
+      </label>
+      <label>Brand
+        <select id="brand"><option value="">All</option></select>
+      </label>
+      <label>Caliber
+        <select id="caliber"><option value="">All</option></select>
+      </label>
+      <label>Min price
+        <input id="minPrice" type="number" min="0" step="1" placeholder="0">
+      </label>
+      <label>Max price
+        <input id="maxPrice" type="number" min="0" step="1" placeholder="any">
+      </label>
+      <label class="check"><input id="inStockOnly" type="checkbox"> In stock only</label>
+      <button id="reset" type="button">Reset filters</button>
+    </aside>
+
+    <section class="results">
+      <div class="toolbar">
+        <span id="count"></span>
+        <label>Sort
+          <select id="sort">
+            <option value="name">Name</option>
+            <option value="price_asc">Price: low to high</option>
+            <option value="price_desc">Price: high to low</option>
+            <option value="newest">Newest</option>
+          </select>
+        </label>
+      </div>
+      <div id="grid" class="grid"></div>
+      <nav id="pager" class="pager"></nav>
+    </section>
+  </main>
+
+  <dialog id="detail"></dialog>
+
+  <footer>Fictional shop for a school project. Sandbox payments only. Buyers must hold a valid firearms licence.</footer>
+  <script src="app.js"></script>
+</body>
+</html>
