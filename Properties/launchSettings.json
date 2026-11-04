@@ -3,10 +3,8 @@
     "GunSlop": {
       "commandName": "Project",
       "launchBrowser": true,
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "applicationUrl": "https://localhost:62383;http://localhost:62384"
+      "applicationUrl": "http://localhost:5080",
+      "environmentVariables": { "ASPNETCORE_ENVIRONMENT": "Development" }
     }
   }
 }

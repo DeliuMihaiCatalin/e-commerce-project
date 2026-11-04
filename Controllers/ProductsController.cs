@@ -14,7 +14,7 @@ public class ProductsController : ControllerBase
 
     public ProductsController(AppDbContext db) => _db = db;
 
-    // GET /api/products?q=glock&category=Firearm&brand=Falcon%20Arms&caliber=9mm
+    // GET /api/products?q=falcon&categoryId=2&brand=Falcon%20Arms&caliber=9mm
     //                  &minPrice=100&maxPrice=900&inStockOnly=true&sort=price_asc&page=1&pageSize=12
     [HttpGet]
     public async Task<ActionResult<PagedResult<ProductDto>>> Get([FromQuery] ProductQuery query)
@@ -22,7 +22,10 @@ public class ProductsController : ControllerBase
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
 
-        IQueryable<Product> products = _db.Products.AsNoTracking();
+        IQueryable<Product> products = _db.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Where(p => p.IsActive);
 
         // ---- basic search: every word must match name, brand, caliber or description ----
         if (!string.IsNullOrWhiteSpace(query.Q))
@@ -36,15 +39,18 @@ public class ProductsController : ControllerBase
                 var w = word; // capture
                 products = products.Where(p =>
                     EF.Functions.Like(p.Name, $"%{w}%") ||
-                    EF.Functions.Like(p.Brand, $"%{w}%") ||
+                    (p.Brand != null && EF.Functions.Like(p.Brand, $"%{w}%")) ||
                     (p.Caliber != null && EF.Functions.Like(p.Caliber, $"%{w}%")) ||
-                    EF.Functions.Like(p.Description, $"%{w}%"));
+                    (p.Description != null && EF.Functions.Like(p.Description, $"%{w}%")));
             }
         }
 
         // ---- filters ----
-        if (query.Category.HasValue)
-            products = products.Where(p => p.Category == query.Category.Value);
+        if (query.CategoryId.HasValue)
+        {
+            var cid = query.CategoryId.Value;   // a parent category also matches its children
+            products = products.Where(p => p.CategoryId == cid || p.Category.ParentId == cid);
+        }
 
         if (!string.IsNullOrWhiteSpace(query.Brand))
         {
@@ -76,10 +82,10 @@ public class ProductsController : ControllerBase
         // ---- sorting ----
         products = query.Sort?.ToLowerInvariant() switch
         {
-            "price_asc"  => products.OrderBy(p => p.PriceCents).ThenBy(p => p.Name),
+            "price_asc" => products.OrderBy(p => p.PriceCents).ThenBy(p => p.Name),
             "price_desc" => products.OrderByDescending(p => p.PriceCents).ThenBy(p => p.Name),
-            "newest"     => products.OrderByDescending(p => p.Id),
-            _            => products.OrderBy(p => p.Name)
+            "newest" => products.OrderByDescending(p => p.Id),
+            _ => products.OrderBy(p => p.Name)
         };
 
         // ---- paging ----
@@ -92,32 +98,38 @@ public class ProductsController : ControllerBase
         return Ok(new PagedResult<ProductDto>(rows.Select(ToDto).ToList(), page, pageSize, total));
     }
 
-    // GET /api/products/5   (product detail page)
+    // GET /api/products/5
     [HttpGet("{id:int}")]
     public async Task<ActionResult<ProductDto>> GetById(int id)
     {
-        var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
+        var product = await _db.Products.AsNoTracking()
+            .Include(p => p.Category)
+            .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
         return product is null ? NotFound() : Ok(ToDto(product));
     }
 
-    // GET /api/products/filters   (values for the filter dropdowns)
+    // GET /api/products/filters
     [HttpGet("filters")]
     public async Task<ActionResult<FilterOptions>> GetFilters()
     {
+        var categories = await _db.Categories.AsNoTracking()
+            .OrderBy(c => c.Name)
+            .Select(c => new CategoryDto(c.Id, c.Name, c.ParentId))
+            .ToListAsync();
+
         var brands = await _db.Products.AsNoTracking()
-            .Select(p => p.Brand).Distinct().OrderBy(b => b).ToListAsync();
+            .Where(p => p.IsActive && p.Brand != null)
+            .Select(p => p.Brand ?? "").Distinct().OrderBy(b => b).ToListAsync();
 
         var calibers = await _db.Products.AsNoTracking()
-            .Where(p => p.Caliber != null)
-            .Select(p => p.Caliber!).Distinct().OrderBy(c => c).ToListAsync();
-
-        var categories = Enum.GetNames<Category>().ToList();
+            .Where(p => p.IsActive && p.Caliber != null)
+            .Select(p => p.Caliber ?? "").Distinct().OrderBy(c => c).ToListAsync();
 
         return Ok(new FilterOptions(categories, brands, calibers));
     }
 
     private static ProductDto ToDto(Product p) => new(
-        p.Id, p.Name, p.Brand, p.Category.ToString(), p.Caliber,
-        p.PriceCents / 100m, p.Description, p.ImageUrl,
+        p.Id, p.Name, p.Brand ?? "", p.Category.Name, p.Caliber,
+        p.PriceCents / 100m, p.Description ?? "", p.ImageUrl,
         p.StockQuantity, p.StockQuantity > 0, p.RequiresLicence);
 }

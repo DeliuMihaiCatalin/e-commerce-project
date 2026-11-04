@@ -17,9 +17,9 @@ public record ProductDto(
 /// <summary>Query-string parameters for GET /api/products.</summary>
 public class ProductQuery
 {
-    /// <summary>Basic search text (name, brand, caliber, description).</summary>
     public string? Q { get; set; }
-    public Category? Category { get; set; }
+    /// <summary>A category id. A parent category also matches its sub-categories.</summary>
+    public int? CategoryId { get; set; }
     public string? Brand { get; set; }
     public string? Caliber { get; set; }
     public decimal? MinPrice { get; set; }
@@ -37,7 +37,9 @@ public record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);
 }
 
+public record CategoryDto(int Id, string Name, int? ParentId);
+
 public record FilterOptions(
-    IReadOnlyList<string> Categories,
+    IReadOnlyList<CategoryDto> Categories,
     IReadOnlyList<string> Brands,
     IReadOnlyList<string> Calibers);

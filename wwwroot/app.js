@@ -8,7 +8,12 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 async function loadFilters() {
   const res = await fetch('/api/products/filters');
   const f = await res.json();
-  fill($('category'), f.categories);
+  const parents = f.categories.filter(c => c.parentId == null);
+  for (const parent of parents) {
+    $('category').appendChild(new Option(parent.name, parent.id));
+    for (const child of f.categories.filter(c => c.parentId === parent.id))
+      $('category').appendChild(new Option('\u00A0\u00A0— ' + child.name, child.id));
+  }
   fill($('brand'), f.brands);
   fill($('caliber'), f.calibers);
 }
@@ -25,7 +30,7 @@ function buildQuery() {
   const p = new URLSearchParams();
   const add = (k, v) => { if (v !== '' && v != null) p.set(k, v); };
   add('q', $('q').value.trim());
-  add('category', $('category').value);
+  add('categoryId', $('category').value);
   add('brand', $('brand').value);
   add('caliber', $('caliber').value);
   add('minPrice', $('minPrice').value);
@@ -63,6 +68,7 @@ function render(data) {
             <span class="tag ${p.inStock ? 'ok' : 'out'}">${p.inStock ? 'In stock' : 'Out of stock'}</span>
           </span>
           <span class="price">${money(p.price)}</span>
+          <button class="add" data-add="${p.id}" ${p.inStock ? '' : 'disabled'}>${p.inStock ? 'Add to cart' : 'Out of stock'}</button>
         </div>
       </article>`).join('');
   }
@@ -91,8 +97,10 @@ async function showDetail(id) {
     <p>${esc(p.description)}</p>
     <p class="price" style="font-size:1.4rem;color:var(--accent);font-weight:700">${money(p.price)}</p>
     ${p.requiresLicence ? '<p class="notice">⚠ A valid firearms licence is required to purchase this item.</p>' : ''}
-    <button id="closeDetail">Close</button>`;
+    <p><button id="addDetail" ${p.inStock ? '' : 'disabled'}>${p.inStock ? 'Add to cart' : 'Out of stock'}</button>
+       <button id="closeDetail">Close</button></p>`;
   $('closeDetail').onclick = () => d.close();
+  $('addDetail').onclick = () => addToCart(p.id);
   d.showModal();
 }
 
@@ -114,6 +122,8 @@ $('reset').addEventListener('click', () => {
 });
 
 $('grid').addEventListener('click', e => {
+  const addBtn = e.target.closest('[data-add]');
+  if (addBtn) { addToCart(Number(addBtn.dataset.add)); return; }
   const card = e.target.closest('.card');
   if (card) showDetail(card.dataset.id);
 });
@@ -123,4 +133,106 @@ $('detail').addEventListener('click', e => { if (e.target === $('detail')) $('de
 let t;
 $('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(refresh, 300); });
 
+// ================= CART =================
+let cart = { items: [], itemCount: 0, subtotal: 0, requiresLicence: false };
+
+async function cartFetch(path, method = 'GET', body) {
+  const res = await fetch('/api/cart' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.message || 'Something went wrong with the cart.');
+  return data;
+}
+
+let toastTimer;
+function toast(msg, isError = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = 'toast', 2500);
+}
+
+function setCart(c) {
+  cart = c;
+  $('cartCount').textContent = c.itemCount;
+  if ($('cart').open) renderCart();
+}
+
+async function loadCart() {
+  try { setCart(await cartFetch('')); } catch { /* ignore on startup */ }
+}
+
+async function addToCart(productId, quantity = 1) {
+  try {
+    setCart(await cartFetch('/items', 'POST', { productId, quantity }));
+    toast('Added to cart');
+  } catch (err) { toast(err.message, true); }
+}
+
+async function setQuantity(productId, quantity) {
+  try { setCart(await cartFetch('/items/' + productId, 'PUT', { quantity })); }
+  catch (err) { toast(err.message, true); }
+}
+
+async function removeItem(productId) {
+  try { setCart(await cartFetch('/items/' + productId, 'DELETE')); }
+  catch (err) { toast(err.message, true); }
+}
+
+async function clearCart() {
+  try { setCart(await cartFetch('', 'DELETE')); }
+  catch (err) { toast(err.message, true); }
+}
+
+function renderCart() {
+  const d = $('cart');
+  if (cart.items.length === 0) {
+    d.innerHTML = `<h2>Your cart</h2><p class="empty">Your cart is empty.</p>
+      <div class="cart-actions"><button data-close>Continue shopping</button></div>`;
+    return;
+  }
+  d.innerHTML = `
+    <h2>Your cart (${cart.itemCount} item${cart.itemCount === 1 ? '' : 's'})</h2>
+    ${cart.items.map(i => `
+      <div class="line" data-pid="${i.productId}">
+        <img src="${esc(i.imageUrl)}" alt="">
+        <div>${esc(i.name)}<br><small>${esc(i.brand)} · ${money(i.unitPrice)} each</small></div>
+        <div class="qty">
+          <button data-dec aria-label="Decrease">−</button>
+          <span>${i.quantity}</span>
+          <button data-inc aria-label="Increase" ${i.quantity >= i.stockQuantity ? 'disabled' : ''}>+</button>
+        </div>
+        <div class="total">${money(i.lineTotal)}</div>
+        <button class="remove" data-remove aria-label="Remove">✕</button>
+      </div>`).join('')}
+    <div class="cart-footer">
+      <span>Subtotal</span><span class="subtotal">${money(cart.subtotal)}</span>
+    </div>
+    ${cart.requiresLicence ? '<p class="notice">⚠ A valid firearms licence is required for firearms and ammunition in your cart.</p>' : ''}
+    <div class="cart-actions">
+      <button data-clear style="background:#6b2222;color:#fff">Empty cart</button>
+      <button data-close>Continue shopping</button>
+      <button disabled title="Coming in week 5">Checkout (soon)</button>
+    </div>`;
+}
+
+$('cartBtn').addEventListener('click', () => { renderCart(); $('cart').showModal(); });
+$('cart').addEventListener('click', e => {
+  if (e.target === $('cart') || e.target.closest('[data-close]')) { $('cart').close(); return; }
+  if (e.target.closest('[data-clear]')) { clearCart(); return; }
+  const line = e.target.closest('.line');
+  if (!line) return;
+  const pid = Number(line.dataset.pid);
+  const item = cart.items.find(i => i.productId === pid);
+  if (!item) return;
+  if (e.target.closest('[data-inc]')) setQuantity(pid, item.quantity + 1);
+  else if (e.target.closest('[data-dec]')) setQuantity(pid, item.quantity - 1);
+  else if (e.target.closest('[data-remove]')) removeItem(pid);
+});
+
+loadCart();
 loadFilters().then(loadProducts);

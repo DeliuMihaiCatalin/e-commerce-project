@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "GGjKZ/DfBys=",
+  "dgSpecHash": "DAj6TwI/fog=",
   "success": true,
-  "projectFilePath": "E:\\Facultate\\EC\\GunSlop\\GunSlop.csproj",
+  "projectFilePath": "E:\\Facultate\\EC\\GunSlop2\\GunSlop.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Stefan\\.nuget\\packages\\microsoft.data.sqlite.core\\8.0.10\\microsoft.data.sqlite.core.8.0.10.nupkg.sha512",
     "C:\\Users\\Stefan\\.nuget\\packages\\microsoft.entityframeworkcore\\8.0.10\\microsoft.entityframeworkcore.8.0.10.nupkg.sha512",
